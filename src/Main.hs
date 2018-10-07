@@ -88,7 +88,7 @@ messageReaderLoop conn action = loop mempty
 
 
 serverMain :: Socket -> CommandRegistry -> StateT ConnectionState IO ()
-serverMain conn registry = messageReaderLoop conn $ \msg -> do
+serverMain conn registry = messageReaderLoop conn $ \msg ->
     case parseRawCommand msg of
         Left err         -> do
             logInfo $ "Parse error: " ++ err
@@ -127,15 +127,15 @@ reportParseError conn = do
 
 reportUnknownCommand :: Socket -> RawCommand -> IO ()
 reportUnknownCommand conn command = do
-    let errorMsg = (rawCommandTag command) `B.append` TE.encodeUtf8 " BAD unknown command\r\n"
+    let errorMsg = rawCommandTag command `B.append` TE.encodeUtf8 " BAD unknown command\r\n"
     sendAll conn errorMsg
 
 reportArgumentParseError :: Socket -> RawCommand -> IO ()
 reportArgumentParseError conn command = do
-    let errorMsg = (rawCommandTag command) `B.append` TE.encodeUtf8 " BAD invalid arguments\r\n"
+    let errorMsg = rawCommandTag command `B.append` TE.encodeUtf8 " BAD invalid arguments\r\n"
     sendAll conn errorMsg
 
 reportWrongState :: Socket -> RawCommand -> IO ()
 reportWrongState conn command = do
-    let errorMsg = (rawCommandTag command) `B.append` TE.encodeUtf8 " BAD invalid command in this state\r\n"
+    let errorMsg = rawCommandTag command `B.append` TE.encodeUtf8 " BAD invalid command in this state\r\n"
     sendAll conn errorMsg

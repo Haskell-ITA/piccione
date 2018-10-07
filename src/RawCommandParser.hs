@@ -85,8 +85,7 @@ rawCommand = do
     then return $ RawCommand commandTag commandName B.empty
     else do
         space
-        commandArguments <- M.takeRest
-        return $ RawCommand commandTag commandName commandArguments
+        RawCommand commandTag commandName <$> M.takeRest
 
 parseRawCommand :: B.ByteString -> Either String RawCommand
 parseRawCommand input = case M.parse rawCommand "" input of
@@ -97,12 +96,16 @@ getNextMessage :: B.Builder -> Socket -> IO (B.ByteString, B.Builder)
 getNextMessage leftovers conn = do
     let bufferSize = 2048
     chunk <- recv conn bufferSize
-    let (head, tail) = B.breakSubstring "\r\n" chunk
-    if B.null tail
-    then do
-        getNextMessage (leftovers <> B.byteString head) conn
+    if B.null chunk
+    then
+        return (BL.toStrict . B.toLazyByteString $ leftovers, mempty)
+
     else do
-        let newLeftovers = B.byteString $ B.drop 2 tail
-        let result       = BL.toStrict . B.toLazyByteString $ leftovers <> B.byteString head
-        return (result, newLeftovers)
+        let (head, tail) = B.breakSubstring "\r\n" chunk
+        if B.null tail
+        then  getNextMessage (leftovers <> B.byteString head) conn
+        else do
+            let newLeftovers = B.byteString $ B.drop 2 tail
+            let result       = BL.toStrict . B.toLazyByteString $ leftovers <> B.byteString head
+            return (result, newLeftovers)
 
