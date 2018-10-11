@@ -3,8 +3,8 @@
 module MailCommandMonad
 ( CommandContext
 , MailCommand
-, getConnectionState
-, setConnectionState
+, getServerState
+, setServerState
 , sendResponse
 , sendUntaggedData
 , runMailCommand
@@ -18,12 +18,11 @@ import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Control.Monad.Trans
 
-import Network.Socket.ByteString
-import Network.Socket (Socket)
+import ConnectionContext
 
 import Control.Applicative (Alternative)
 
-import ConnectionState
+import ServerState
 
 import Logger
 
@@ -31,12 +30,12 @@ import qualified Text.Megaparsec as M
     
 data CommandContext = CommandContext
                     { commandTag   :: B.ByteString
-                    , connection   :: Socket
+                    , connection   :: Connection
                     }
 
 type ParserT = M.ParsecT Void B.ByteString
 
-newtype MailCommand a = MailCommand { unwrap :: ReaderT CommandContext (ParserT (StateT ConnectionState IO)) a }
+newtype MailCommand a = MailCommand { unwrap :: ReaderT CommandContext (ParserT (StateT ServerState IO)) a }
                       deriving(Functor, Applicative, Monad, Alternative, MonadPlus)
 
 instance M.MonadParsec Void B.ByteString MailCommand where
@@ -49,27 +48,27 @@ instance M.MonadParsec Void B.ByteString MailCommand where
     notFollowedBy (MailCommand m)  = MailCommand $ M.notFollowedBy m
     withRecovery f (MailCommand m)  = MailCommand $ M.withRecovery (unwrap . f) m
     observing (MailCommand m)  = MailCommand $ M.observing m
-    eof = MailCommand $ M.eof
+    eof = MailCommand M.eof
     token f s = MailCommand $ M.token f s
     tokens f t = MailCommand $ M.tokens f t
     takeWhileP n p = MailCommand $ M.takeWhileP n p
     takeWhile1P n p  = MailCommand $ M.takeWhile1P n p
     takeP n c = MailCommand $ M.takeP n c
-    getParserState = MailCommand $ M.getParserState
+    getParserState = MailCommand M.getParserState
     updateParserState f = MailCommand $ M.updateParserState f
 
 
-getConnectionState :: MailCommand ConnectionState
-getConnectionState = MailCommand $ get
+getServerState :: MailCommand ServerState
+getServerState = MailCommand get
 
-setConnectionState :: ConnectionState -> MailCommand ()
-setConnectionState = MailCommand . put
+setServerState :: ServerState -> MailCommand ()
+setServerState = MailCommand . put
 
 runMailCommand :: MailCommand a
                -> B.ByteString
-               -> Socket
+               -> Connection
                -> B.ByteString
-               -> StateT ConnectionState IO (Either String a)
+               -> StateT ServerState IO (Either String a)
 
 runMailCommand (MailCommand m ) commandTag connection unparsedArgs = do
     let parser = runReaderT m (CommandContext commandTag connection)
@@ -82,11 +81,14 @@ runMailCommand (MailCommand m ) commandTag connection unparsedArgs = do
 sendUntaggedData :: B.ByteString -> MailCommand ()
 sendUntaggedData bs = MailCommand $ do
     conn <- reader connection
-    liftIO $ sendAll conn (bs `B.append` B.pack [ 0x0d, 0x0a ])
+    liftIO $ send conn (bs `B.append` B.pack [ 0x0d, 0x0a ])
 
 sendResponse :: B.ByteString -> MailCommand ()
 sendResponse respData = MailCommand $ do
     (CommandContext tag conn) <- ask
-    let response = tag `B.append` (B.cons 0x20 respData) `B.append` B.pack [ 0x0d, 0x0a ]
-    liftIO $ sendAll conn response
+    let response = tag `B.append` B.cons 0x20 respData `B.append` B.pack [ 0x0d, 0x0a ]
+    liftIO $ send conn response
+
+isConnectionSecure :: MailCommand Bool
+isConnectionSecure = MailCommand $ reader (isTls . connection)
 

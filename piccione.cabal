@@ -19,11 +19,15 @@ executable piccione
   main-is:             Main.hs
   other-modules:       RawCommandParser,
                        Command,
-                       ConnectionState,
+                       ServerState,
                        CommandRegistry,
                        Logger,
                        MailCommandMonad,
                        ArgumentsParserUtils,
+                       Tls,
+                       ServerLogic,
+                       MessageReader,
+                       ConnectionContext,
                        Commands.AnyState,
                        Commands.NotAuthenticatedState,
                        Commands.AuthenticatedState,
@@ -35,7 +39,10 @@ executable piccione
                        megaparsec,
                        text,
                        mtl,
-                       network
+                       network,
+                       tls,
+                       data-default,
+                       optparse-applicative
 
   hs-source-dirs:      src
   default-language:    Haskell2010
